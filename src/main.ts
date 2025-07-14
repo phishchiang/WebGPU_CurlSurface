@@ -109,6 +109,7 @@ export class WebGPUApp{
   private usePing = true;
   private particleComputePipeline!: GPUComputePipeline;
   private deltaTimeBuffer!: GPUBuffer;
+  private prevDt: number = 1.0 / 60.0; // Start with a default frame time (e.g., 60 FPS)
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -199,6 +200,61 @@ export class WebGPUApp{
     });
   }
 
+// Utility to sample N random points on mesh surface
+private sampleMeshSurfacePoints(
+  vertexData: Float32Array,
+  indices: Uint16Array,
+  vertexStride: number, // e.g., 6 for [x,y,z,nx,ny,nz]
+  positionOffset: number, // e.g., 0
+  normalOffset: number,   // e.g., 3
+  numParticles: number
+): { position: Float32Array, normal: Float32Array }[] {
+  const result: { position: Float32Array, normal: Float32Array }[] = [];
+  const triangleCount = indices.length / 3;
+
+  for (let i = 0; i < numParticles; i++) {
+    // Pick a random triangle
+    const triIdx = Math.floor(Math.random() * triangleCount);
+    const i0 = indices[triIdx * 3 + 0];
+    const i1 = indices[triIdx * 3 + 1];
+    const i2 = indices[triIdx * 3 + 2];
+
+    // Get vertex positions
+    const v0 = vertexData.subarray(i0 * vertexStride + positionOffset, i0 * vertexStride + positionOffset + 3);
+    const v1 = vertexData.subarray(i1 * vertexStride + positionOffset, i1 * vertexStride + positionOffset + 3);
+    const v2 = vertexData.subarray(i2 * vertexStride + positionOffset, i2 * vertexStride + positionOffset + 3);
+
+    // Get vertex normals
+    const n0 = vertexData.subarray(i0 * vertexStride + normalOffset, i0 * vertexStride + normalOffset + 3);
+    const n1 = vertexData.subarray(i1 * vertexStride + normalOffset, i1 * vertexStride + normalOffset + 3);
+    const n2 = vertexData.subarray(i2 * vertexStride + normalOffset, i2 * vertexStride + normalOffset + 3);
+
+    // Random barycentric coordinates
+    let u = Math.random();
+    let v = Math.random();
+    if (u + v > 1) { u = 1 - u; v = 1 - v; }
+    const w = 1 - u - v;
+
+    // Interpolate position and normal
+    const pos = [
+      u * v0[0] + v * v1[0] + w * v2[0],
+      u * v0[1] + v * v1[1] + w * v2[1],
+      u * v0[2] + v * v1[2] + w * v2[2],
+    ];
+    const norm = [
+      u * n0[0] + v * n1[0] + w * n2[0],
+      u * n0[1] + v * n1[1] + w * n2[1],
+      u * n0[2] + v * n1[2] + w * n2[2],
+    ];
+    // Normalize normal
+    const normLen = Math.hypot(norm[0], norm[1], norm[2]);
+    const normNormalized = [norm[0]/normLen, norm[1]/normLen, norm[2]/normLen];
+
+    result.push({ position: new Float32Array(pos), normal: new Float32Array(normNormalized) });
+  }
+  return result;
+}
+
   private async initLoadAndProcessGLB() {
     const { interleavedData, indices, indexCount, vertexLayout } = await loadAndProcessGLB(MESH_PATH);
   
@@ -233,6 +289,21 @@ export class WebGPUApp{
     this.loadIndexCount = indexCount;
     this.loadVertexLayout = vertexLayout;
 
+    
+    const PARTICLE_COUNT = 10000;
+    const vertexStride = 6; // adjust based on your mesh layout
+    const positionOffset = 0;
+    const normalOffset = 3;
+
+    const surfacePoints = this.sampleMeshSurfacePoints(
+      interleavedData,
+      indices!,
+      vertexStride,
+      positionOffset,
+      normalOffset,
+      PARTICLE_COUNT
+    );
+
     // Load square mesh for particles
     const { 
       interleavedData: sqData, 
@@ -266,7 +337,7 @@ export class WebGPUApp{
     this.particleIndexCount = sqIndexCount;
     this.particleVertexLayout = sqVertexLayout;
 
-    console.log(sqVertexLayout)
+    console.log(surfacePoints)
   }
 
   private initCam(){
@@ -631,16 +702,23 @@ export class WebGPUApp{
 
   private renderFrame() {
     const now = Date.now();
-    const MAX_DELTA = 0.05; // 50 ms; clamping delta time for stable simulation
-    const deltaTime = Math.min((now - this.lastFrameMS) / 1000, MAX_DELTA);
+ 
+    // Clamp and smooth uDeltaTime on the CPU side before passing to WGSL.
+    const deltaTime = (now - this.lastFrameMS) / 1000;
+    const minDt = 1.0 / 120.0;
+    const maxDt = 1.0 / 30.0;
+    const clampedDt = Math.max(minDt, Math.min(maxDt, deltaTime));
+    let smoothedDt = this.prevDt * 0.8 + clampedDt * 0.2;
+    this.prevDt = smoothedDt;
+
     this.lastFrameMS = now;
 
     // Update the uniform uTime value
-    this.uTime += deltaTime;
+    this.uTime += this.prevDt;
     const uTimeFloatArray = new Float32Array([this.uTime]);
     this.device.queue.writeBuffer(this.uTimeBuffer, 0, uTimeFloatArray.buffer);
 
-    this.viewMatrix = this.getViewMatrix(deltaTime);
+    this.viewMatrix = this.getViewMatrix(this.prevDt);
     this.device.queue.writeBuffer(this.viewMatrixBuffer, 0, this.viewMatrix.buffer);
 
     // Set up a render pass target based on post-processing effects
@@ -666,7 +744,7 @@ export class WebGPUApp{
       this.particleComputePipeline,
       inBuffer,
       outBuffer,
-      deltaTime,
+      this.prevDt,
       this.deltaTimeBuffer,
       this.uTimeBuffer,
       this.uRandomnessBuffer,
