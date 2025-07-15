@@ -2,10 +2,11 @@ export class ParticleBuffer {
   public positionBuffer: GPUBuffer;
   public velocityBuffer: GPUBuffer;
   public rotationBuffer: GPUBuffer;
+  public normalBuffer: GPUBuffer;
   public randomBuffer: GPUBuffer;
   public particleCount: number;
 
-  constructor(device: GPUDevice, particleCount: number, positions?: Float32Array, velocities?: Float32Array, random?: Float32Array) {
+  constructor(device: GPUDevice, particleCount: number, positions?: Float32Array, velocities?: Float32Array, random?: Float32Array, normals?: Float32Array) {
     this.particleCount = particleCount;
 
     // Create position buffer
@@ -85,6 +86,26 @@ export class ParticleBuffer {
         rand[i * 4 + 3] = 0.0;
       }
       device.queue.writeBuffer(this.randomBuffer, 0, rand);
+    }
+
+    // Create normal buffer
+    this.normalBuffer = device.createBuffer({
+      size: particleCount * 4 * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
+    });
+
+    // Initialize normal buffer
+    if (normals) {
+      device.queue.writeBuffer(this.normalBuffer, 0, normals);
+    } else {
+      const normals = new Float32Array(particleCount * 4);
+      for (let i = 0; i < particleCount; ++i) {
+        normals[i * 4 + 0] = 0.0; // x
+        normals[i * 4 + 1] = 0.0; // y
+        normals[i * 4 + 2] = 1.0; // z
+        normals[i * 4 + 3] = 0.0; // w (unused)
+      }
+      device.queue.writeBuffer(this.normalBuffer, 0, normals);
     }
   }
 

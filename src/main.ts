@@ -110,6 +110,8 @@ export class WebGPUApp{
   private particleComputePipeline!: GPUComputePipeline;
   private deltaTimeBuffer!: GPUBuffer;
   private prevDt: number = 1.0 / 60.0; // Start with a default frame time (e.g., 60 FPS)
+  private initialParticlePositions!: Float32Array;
+  private initialParticleNormals!: Float32Array;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -150,8 +152,25 @@ export class WebGPUApp{
 
   private initParticleSystem() {
     const PARTICLE_COUNT = 10000;
-    this.particleBufferA = new ParticleBuffer(this.device, PARTICLE_COUNT);
-    this.particleBufferB = new ParticleBuffer(this.device, PARTICLE_COUNT);
+    // this.particleBufferA = new ParticleBuffer(this.device, PARTICLE_COUNT);
+    // this.particleBufferB = new ParticleBuffer(this.device, PARTICLE_COUNT);
+
+    this.particleBufferA = new ParticleBuffer(
+      this.device,
+      PARTICLE_COUNT,
+      this.initialParticlePositions,
+      undefined,
+      undefined,
+      this.initialParticleNormals
+    );
+    this.particleBufferB = new ParticleBuffer(
+      this.device,
+      PARTICLE_COUNT,
+      this.initialParticlePositions,
+      undefined,
+      undefined,
+      this.initialParticleNormals
+    );
 
     // Pass the square mesh buffers and layout to the renderer
     this.particleRenderer = new ParticleRenderer(
@@ -200,60 +219,64 @@ export class WebGPUApp{
     });
   }
 
-// Utility to sample N random points on mesh surface
-private sampleMeshSurfacePoints(
-  vertexData: Float32Array,
-  indices: Uint16Array,
-  vertexStride: number, // e.g., 6 for [x,y,z,nx,ny,nz]
-  positionOffset: number, // e.g., 0
-  normalOffset: number,   // e.g., 3
-  numParticles: number
-): { position: Float32Array, normal: Float32Array }[] {
-  const result: { position: Float32Array, normal: Float32Array }[] = [];
-  const triangleCount = indices.length / 3;
+  // Utility to sample N random points on mesh surface
+  private sampleMeshSurfacePoints(
+    vertexData: Float32Array,
+    indices: Uint16Array,
+    vertexStride: number, // e.g., 6 for [x,y,z,nx,ny,nz]
+    positionOffset: number, // e.g., 0
+    normalOffset: number,   // e.g., 3
+    numParticles: number
+  ): { position: Float32Array, normal: Float32Array }[] {
+    const result: { position: Float32Array, normal: Float32Array }[] = [];
+    const triangleCount = indices.length / 3;
 
-  for (let i = 0; i < numParticles; i++) {
-    // Pick a random triangle
-    const triIdx = Math.floor(Math.random() * triangleCount);
-    const i0 = indices[triIdx * 3 + 0];
-    const i1 = indices[triIdx * 3 + 1];
-    const i2 = indices[triIdx * 3 + 2];
+    for (let i = 0; i < numParticles; i++) {
+      // Pick a random triangle
+      const triIdx = Math.floor(Math.random() * triangleCount);
+      const i0 = indices[triIdx * 3 + 0];
+      const i1 = indices[triIdx * 3 + 1];
+      const i2 = indices[triIdx * 3 + 2];
 
-    // Get vertex positions
-    const v0 = vertexData.subarray(i0 * vertexStride + positionOffset, i0 * vertexStride + positionOffset + 3);
-    const v1 = vertexData.subarray(i1 * vertexStride + positionOffset, i1 * vertexStride + positionOffset + 3);
-    const v2 = vertexData.subarray(i2 * vertexStride + positionOffset, i2 * vertexStride + positionOffset + 3);
+      // Get vertex positions
+      const v0 = vertexData.subarray(i0 * vertexStride + positionOffset, i0 * vertexStride + positionOffset + 3);
+      const v1 = vertexData.subarray(i1 * vertexStride + positionOffset, i1 * vertexStride + positionOffset + 3);
+      const v2 = vertexData.subarray(i2 * vertexStride + positionOffset, i2 * vertexStride + positionOffset + 3);
 
-    // Get vertex normals
-    const n0 = vertexData.subarray(i0 * vertexStride + normalOffset, i0 * vertexStride + normalOffset + 3);
-    const n1 = vertexData.subarray(i1 * vertexStride + normalOffset, i1 * vertexStride + normalOffset + 3);
-    const n2 = vertexData.subarray(i2 * vertexStride + normalOffset, i2 * vertexStride + normalOffset + 3);
+      // Get vertex normals
+      const n0 = vertexData.subarray(i0 * vertexStride + normalOffset, i0 * vertexStride + normalOffset + 3);
+      const n1 = vertexData.subarray(i1 * vertexStride + normalOffset, i1 * vertexStride + normalOffset + 3);
+      const n2 = vertexData.subarray(i2 * vertexStride + normalOffset, i2 * vertexStride + normalOffset + 3);
 
-    // Random barycentric coordinates
-    let u = Math.random();
-    let v = Math.random();
-    if (u + v > 1) { u = 1 - u; v = 1 - v; }
-    const w = 1 - u - v;
+      // Random barycentric coordinates
+      let u = Math.random();
+      let v = Math.random();
+      if (u + v > 1) { u = 1 - u; v = 1 - v; }
+      const w = 1 - u - v;
 
-    // Interpolate position and normal
-    const pos = [
-      u * v0[0] + v * v1[0] + w * v2[0],
-      u * v0[1] + v * v1[1] + w * v2[1],
-      u * v0[2] + v * v1[2] + w * v2[2],
-    ];
-    const norm = [
-      u * n0[0] + v * n1[0] + w * n2[0],
-      u * n0[1] + v * n1[1] + w * n2[1],
-      u * n0[2] + v * n1[2] + w * n2[2],
-    ];
-    // Normalize normal
-    const normLen = Math.hypot(norm[0], norm[1], norm[2]);
-    const normNormalized = [norm[0]/normLen, norm[1]/normLen, norm[2]/normLen];
+      // Interpolate position and normal
+      const pos = [
+        u * v0[0] + v * v1[0] + w * v2[0],
+        u * v0[1] + v * v1[1] + w * v2[1],
+        u * v0[2] + v * v1[2] + w * v2[2],
+      ];
+      const norm = [
+        u * n0[0] + v * n1[0] + w * n2[0],
+        u * n0[1] + v * n1[1] + w * n2[1],
+        u * n0[2] + v * n1[2] + w * n2[2],
+      ];
+      // Normalize normal
+      const normLen = Math.hypot(norm[0], norm[1], norm[2]);
+      const normNormalized = [norm[0]/normLen, norm[1]/normLen, norm[2]/normLen];
 
-    result.push({ position: new Float32Array(pos), normal: new Float32Array(normNormalized) });
+      result.push({ position: new Float32Array(pos), normal: new Float32Array(normNormalized) });
+      
+      // if (i < 10) {
+      //   console.log(`Sampled pos: ${pos}, norm: ${normNormalized}`);
+      // }
+    }
+    return result;
   }
-  return result;
-}
 
   private async initLoadAndProcessGLB() {
     const { interleavedData, indices, indexCount, vertexLayout } = await loadAndProcessGLB(MESH_PATH);
@@ -291,7 +314,8 @@ private sampleMeshSurfacePoints(
 
     
     const PARTICLE_COUNT = 10000;
-    const vertexStride = 6; // adjust based on your mesh layout
+    // arrayStride: 48 bytes means each vertex is 48 bytes (12 floats, since 1 float = 4 bytes).
+    const vertexStride = 12; 
     const positionOffset = 0;
     const normalOffset = 3;
 
@@ -303,6 +327,19 @@ private sampleMeshSurfacePoints(
       normalOffset,
       PARTICLE_COUNT
     );
+
+    console.log(this.loadVertexLayout);
+    console.log(surfacePoints);
+
+    this.initialParticlePositions = new Float32Array(PARTICLE_COUNT * 4);
+    this.initialParticleNormals = new Float32Array(PARTICLE_COUNT * 4);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const p = surfacePoints[i];
+      this.initialParticlePositions.set(p.position, i * 4);
+      this.initialParticlePositions[i * 4 + 3] = 1.0; // w
+      this.initialParticleNormals.set(p.normal, i * 4);
+      this.initialParticleNormals[i * 4 + 3] = 0.0; // w (unused)
+    }
 
     // Load square mesh for particles
     const { 
@@ -336,8 +373,6 @@ private sampleMeshSurfacePoints(
     this.particleIndexBuffer = sqIndexBuffer;
     this.particleIndexCount = sqIndexCount;
     this.particleVertexLayout = sqVertexLayout;
-
-    console.log(surfacePoints)
   }
 
   private initCam(){
@@ -755,11 +790,11 @@ private sampleMeshSurfacePoints(
     // --- Render scene ---
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
 
-    passEncoder.setPipeline(this.pipeline);
-    passEncoder.setBindGroup(0, this.uniformBindGroup);
-    passEncoder.setVertexBuffer(0, this.loadVerticesBuffer);
-    passEncoder.setIndexBuffer(this.loadIndexBuffer!, 'uint16');
-    passEncoder.drawIndexed(this.loadIndexCount);
+    // passEncoder.setPipeline(this.pipeline);
+    // passEncoder.setBindGroup(0, this.uniformBindGroup);
+    // passEncoder.setVertexBuffer(0, this.loadVerticesBuffer);
+    // passEncoder.setIndexBuffer(this.loadIndexBuffer!, 'uint16');
+    // passEncoder.drawIndexed(this.loadIndexCount);
 
     this.particleRenderer.updateUniforms(this.device, this.projectionMatrix, this.viewMatrix, this.particle_modelMatrix);
     // Render using the *output* buffer (the one just written to)
