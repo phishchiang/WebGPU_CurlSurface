@@ -1,16 +1,14 @@
 @group(0) @binding(0) var<storage, read>  inPositions  : array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read>  inVelocities : array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read>  inRandom : array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read>  inRotations : array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read_write> outPositions  : array<vec4<f32>>;
-@group(0) @binding(5) var<storage, read_write> outVelocities : array<vec4<f32>>;
-@group(0) @binding(6) var<storage, read_write> outRandom : array<vec4<f32>>;
-@group(0) @binding(7) var<storage, read_write> outRotations : array<vec4<f32>>;
-@group(0) @binding(8) var<uniform> uDeltaTime : f32;
-@group(0) @binding(9) var<uniform> uTime : f32;
-@group(0) @binding(10) var<uniform> uRandomness : f32;
-@group(0) @binding(11) var<uniform> uAirResistance : f32;
-@group(0) @binding(12) var<uniform> uBoundaryRadius : f32;
+@group(0) @binding(1) var<storage, read_write> outPositions  : array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read>  inVelocities : array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read_write> outVelocities : array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read>  inRandom : array<vec4<f32>>;
+@group(0) @binding(5) var<storage, read>  inMeshSamples : array<vec4<f32>>;
+@group(0) @binding(6) var<uniform> uDeltaTime : f32;
+@group(0) @binding(7) var<uniform> uTime : f32;
+@group(0) @binding(8) var<uniform> uRandomness : f32;
+@group(0) @binding(9) var<uniform> uAirResistance : f32;
+@group(0) @binding(10) var<uniform> uBoundaryRadius : f32;
 
 fn mod289_vec3(x: vec3<f32>) -> vec3<f32> {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
@@ -173,7 +171,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   var pos = inPositions[idx];
   var vel = inVelocities[idx];
   var ran = inRandom[idx];
-  var rot = inRotations[idx];
 
   // Set acceleration
   var acceleration = vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -194,27 +191,17 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   // Set position
   pos = pos + vel * velocity_random * uDeltaTime;
 
-  // --- Rotation update: face velocity direction ---
-  let v = vel.xyz;
-  let speed = length(v);
-  if (speed > 0.0001) {
-    let forward = normalize(v);
-    let up = vec3<f32>(0.0, 1.0, 0.0);
-    var right = cross(up, forward);
-    if (length(right) < 0.0001) {
-      right = vec3<f32>(1.0, 0.0, 0.0); // fallback if up and forward are parallel
-    } else {
-      right = normalize(right);
-    }
-    let realUp = cross(forward, right);
-    let rotMat = mat3x3<f32>(right, realUp, forward);
-    rot = quat_from_matrix(rotMat);
-  } else {
-    rot = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+  // After updating pos
+  let mesh_center = vec3<f32>(0.0, 0.0, 0.0); // or your mesh's center
+  let max_distance = uBoundaryRadius * 0.3; // tweak as needed
+  if (length(pos.xyz - mesh_center) > max_distance) {
+    // Reset position to a random mesh sample
+    let meshSampleCount = arrayLength(&inMeshSamples);
+    let randomIdx = u32(abs(fract(ran.y) * f32(meshSampleCount)));
+    pos = inMeshSamples[randomIdx];
+    vel = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
 
   outPositions[idx] = pos;
   outVelocities[idx] = vel;
-  outRandom[idx] = ran;
-  outRotations[idx] = rot;
 }

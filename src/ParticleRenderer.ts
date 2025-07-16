@@ -65,17 +65,10 @@ export class ParticleRenderer {
             ],
           },
           {
-            arrayStride: 16, // vec4<f32> quaternion for each particle instance
+            arrayStride: 16, // vec4<f32> velocity for each particle instance
             stepMode: 'instance',
             attributes: [
-              { shaderLocation: 4, offset: 0, format: 'float32x4' }, // instanceRot
-            ],
-          },
-          {
-            arrayStride: 16, // vec4<f32> quaternion for each particle instance
-            stepMode: 'instance',
-            attributes: [
-              { shaderLocation: 5, offset: 0, format: 'float32x4' }, // velocity
+              { shaderLocation: 4, offset: 0, format: 'float32x4' }, // velocity
             ],
           },
         ],
@@ -123,10 +116,8 @@ export class ParticleRenderer {
     pass.setVertexBuffer(0, this.meshVertexBuffer);
     // Set instance position buffer (slot 1)
     pass.setVertexBuffer(1, particleBuffer.positionBuffer);
-    // Set instance rotation buffer (slot 2)
-    pass.setVertexBuffer(2, particleBuffer.rotationBuffer);
-    // Set instance velocity buffer (slot 3)
-    pass.setVertexBuffer(3, particleBuffer.velocityBuffer);
+    // Set instance velocity buffer (slot 2)
+    pass.setVertexBuffer(2, particleBuffer.velocityBuffer);
     // Set index buffer if available
     pass.setIndexBuffer(this.meshIndexBuffer!, 'uint16'); // or 'uint32' if needed
     pass.drawIndexed(this.meshIndexCount, particleBuffer.particleCount);

@@ -4,10 +4,34 @@ export class ParticleBuffer {
   public rotationBuffer: GPUBuffer;
   public normalBuffer: GPUBuffer;
   public randomBuffer: GPUBuffer;
+  public meshSampleBuffer: GPUBuffer; // Buffer for mesh surface samples
+  public meshSampleCount: number;
   public particleCount: number;
+  public setMeshSamples: (samples: Float32Array) => void;
 
   constructor(device: GPUDevice, particleCount: number, positions?: Float32Array, velocities?: Float32Array, random?: Float32Array, normals?: Float32Array) {
     this.particleCount = particleCount;
+    // Create mesh sample buffer (for re-emission)
+    // You should provide meshSamples externally as a Float32Array (count * 4 floats)
+    // For now, create an empty buffer; fill it later when mesh samples are available
+    this.meshSampleCount = 0;
+    this.meshSampleBuffer = device.createBuffer({
+      size: 4 * 4 * 1, // placeholder, will resize when mesh samples are set
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+
+    // Helper to set mesh samples later
+    this.setMeshSamples = (samples: Float32Array) => {
+      this.meshSampleCount = samples.length / 4;
+      if (this.meshSampleBuffer) {
+        this.meshSampleBuffer.destroy();
+      }
+      this.meshSampleBuffer = device.createBuffer({
+        size: samples.length * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      device.queue.writeBuffer(this.meshSampleBuffer, 0, samples);
+    };
 
     // Create position buffer
     this.positionBuffer = device.createBuffer({
@@ -131,18 +155,16 @@ export class ParticleBuffer {
       layout: computePipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: inBuffer.positionBuffer } },
-        { binding: 1, resource: { buffer: inBuffer.velocityBuffer } },
-        { binding: 2, resource: { buffer: inBuffer.randomBuffer } },
-        { binding: 3, resource: { buffer: inBuffer.rotationBuffer } },
-        { binding: 4, resource: { buffer: outBuffer.positionBuffer } },
-        { binding: 5, resource: { buffer: outBuffer.velocityBuffer } },
-        { binding: 6, resource: { buffer: outBuffer.randomBuffer } },
-        { binding: 7, resource: { buffer: outBuffer.rotationBuffer } },
-        { binding: 8, resource: { buffer: deltaTimeBuffer } },
-        { binding: 9, resource: { buffer: uTimeBuffer } },
-        { binding: 10, resource: { buffer: uRandomnessBuffer } },
-        { binding: 11, resource: { buffer: uAirResistanceBuffer } },
-        { binding: 12, resource: { buffer: uBoundaryRadiusBuffer } },
+        { binding: 1, resource: { buffer: outBuffer.positionBuffer } },
+        { binding: 2, resource: { buffer: inBuffer.velocityBuffer } },
+        { binding: 3, resource: { buffer: outBuffer.velocityBuffer } },
+        { binding: 4, resource: { buffer: inBuffer.randomBuffer } }, // Only use inBuffer.randomBuffer
+        { binding: 5, resource: { buffer: inBuffer.meshSampleBuffer } },
+        { binding: 6, resource: { buffer: deltaTimeBuffer } },
+        { binding: 7, resource: { buffer: uTimeBuffer } },
+        { binding: 8, resource: { buffer: uRandomnessBuffer } },
+        { binding: 9, resource: { buffer: uAirResistanceBuffer } },
+        { binding: 10, resource: { buffer: uBoundaryRadiusBuffer } }
       ],
     });
 

@@ -112,6 +112,7 @@ export class WebGPUApp{
   private prevDt: number = 1.0 / 60.0; // Start with a default frame time (e.g., 60 FPS)
   private initialParticlePositions!: Float32Array;
   private initialParticleNormals!: Float32Array;
+  private meshSamplesArray!: Float32Array;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -172,6 +173,9 @@ export class WebGPUApp{
       this.initialParticleNormals
     );
 
+    this.particleBufferA.setMeshSamples(this.meshSamplesArray);
+    this.particleBufferB.setMeshSamples(this.meshSamplesArray);
+
     // Pass the square mesh buffers and layout to the renderer
     this.particleRenderer = new ParticleRenderer(
       this.device,
@@ -186,18 +190,16 @@ export class WebGPUApp{
     const particleComputeBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
         { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-        { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
-        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 12, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
     });
 
@@ -327,6 +329,12 @@ export class WebGPUApp{
       normalOffset,
       PARTICLE_COUNT
     );
+
+    this.meshSamplesArray = new Float32Array(PARTICLE_COUNT * 4);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      this.meshSamplesArray.set(surfacePoints[i].position, i * 4);
+      this.meshSamplesArray[i * 4 + 3] = 1.0; // w
+    }
 
     console.log(this.loadVertexLayout);
     console.log(surfacePoints);
@@ -585,7 +593,9 @@ export class WebGPUApp{
 
   private async initializeWebGPU() {
     const adapter = await navigator.gpu?.requestAdapter({ featureLevel: 'compatibility' });
-    this.device = await adapter?.requestDevice() as GPUDevice;
+    this.device = await adapter?.requestDevice({
+      requiredLimits: { maxStorageBuffersPerShaderStage: 10 },
+    }) as GPUDevice;
 
     this.context = this.canvas.getContext('webgpu') as GPUCanvasContext;
     const devicePixelRatio = window.devicePixelRatio;
