@@ -1,13 +1,12 @@
 export class ParticleBuffer {
   public positionBuffer: GPUBuffer;
   public velocityBuffer: GPUBuffer;
-  public rotationBuffer: GPUBuffer;
-  public normalBuffer: GPUBuffer;
   public randomBuffer: GPUBuffer;
   public meshSampleBuffer: GPUBuffer; // Buffer for mesh surface samples
   public meshSampleCount: number;
   public particleCount: number;
   public setMeshSamples: (samples: Float32Array) => void;
+  public agesBuffer: GPUBuffer;
 
   constructor(device: GPUDevice, particleCount: number, positions?: Float32Array, velocities?: Float32Array, random?: Float32Array, normals?: Float32Array) {
     this.particleCount = particleCount;
@@ -60,23 +59,6 @@ export class ParticleBuffer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
     });
 
-    // Create rotation buffer (quaternion: 4 floats per particle)
-    this.rotationBuffer = device.createBuffer({
-      size: particleCount * 4 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-
-    // Initialize rotation buffer
-    const rot = new Float32Array(particleCount * 4);
-    for (let i = 0; i < particleCount; ++i) {
-      // Identity quaternion (x=0, y=0, z=0, w=1)
-      rot[i * 4 + 0] = 0.0;
-      rot[i * 4 + 1] = 0.0;
-      rot[i * 4 + 2] = 0.0;
-      rot[i * 4 + 3] = 1.0;
-    }
-    device.queue.writeBuffer(this.rotationBuffer, 0, rot);
-
     // Initialize velocity buffer
     if (velocities && velocities.length === particleCount * 4) {
       device.queue.writeBuffer(this.velocityBuffer, 0, velocities);
@@ -112,25 +94,15 @@ export class ParticleBuffer {
       device.queue.writeBuffer(this.randomBuffer, 0, rand);
     }
 
-    // Create normal buffer
-    this.normalBuffer = device.createBuffer({
+    // Create inAges and outAges buffers (ping-pong)
+    this.agesBuffer = device.createBuffer({
       size: particleCount * 4 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-
-    // Initialize normal buffer
-    if (normals) {
-      device.queue.writeBuffer(this.normalBuffer, 0, normals);
-    } else {
-      const normals = new Float32Array(particleCount * 4);
-      for (let i = 0; i < particleCount; ++i) {
-        normals[i * 4 + 0] = 0.0; // x
-        normals[i * 4 + 1] = 0.0; // y
-        normals[i * 4 + 2] = 1.0; // z
-        normals[i * 4 + 3] = 0.0; // w (unused)
-      }
-      device.queue.writeBuffer(this.normalBuffer, 0, normals);
-    }
+    // Initialize ages to zero
+    const ages = new Float32Array(particleCount * 4);
+    ages.fill(0);
+    device.queue.writeBuffer(this.agesBuffer, 0, ages);
   }
 
   // Static method for GPGPU update
@@ -160,11 +132,13 @@ export class ParticleBuffer {
         { binding: 3, resource: { buffer: outBuffer.velocityBuffer } },
         { binding: 4, resource: { buffer: inBuffer.randomBuffer } }, // Only use inBuffer.randomBuffer
         { binding: 5, resource: { buffer: inBuffer.meshSampleBuffer } },
-        { binding: 6, resource: { buffer: deltaTimeBuffer } },
-        { binding: 7, resource: { buffer: uTimeBuffer } },
-        { binding: 8, resource: { buffer: uRandomnessBuffer } },
-        { binding: 9, resource: { buffer: uAirResistanceBuffer } },
-        { binding: 10, resource: { buffer: uBoundaryRadiusBuffer } }
+        { binding: 6, resource: { buffer: inBuffer.agesBuffer } },
+        { binding: 7, resource: { buffer: outBuffer.agesBuffer } },
+        { binding: 8, resource: { buffer: deltaTimeBuffer } },
+        { binding: 9, resource: { buffer: uTimeBuffer } },
+        { binding: 10, resource: { buffer: uRandomnessBuffer } },
+        { binding: 11, resource: { buffer: uAirResistanceBuffer } },
+        { binding: 12, resource: { buffer: uBoundaryRadiusBuffer } }
       ],
     });
 

@@ -195,11 +195,13 @@ export class WebGPUApp{
         { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
         { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
         { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
         { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 12, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       ],
     });
 

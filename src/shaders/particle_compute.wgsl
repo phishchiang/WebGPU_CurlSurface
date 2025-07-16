@@ -4,11 +4,13 @@
 @group(0) @binding(3) var<storage, read_write> outVelocities : array<vec4<f32>>;
 @group(0) @binding(4) var<storage, read>  inRandom : array<vec4<f32>>;
 @group(0) @binding(5) var<storage, read>  inMeshSamples : array<vec4<f32>>;
-@group(0) @binding(6) var<uniform> uDeltaTime : f32;
-@group(0) @binding(7) var<uniform> uTime : f32;
-@group(0) @binding(8) var<uniform> uRandomness : f32;
-@group(0) @binding(9) var<uniform> uAirResistance : f32;
-@group(0) @binding(10) var<uniform> uBoundaryRadius : f32;
+@group(0) @binding(6) var<storage, read>  inAges : array<vec4<f32>>;
+@group(0) @binding(7) var<storage, read_write> outAges : array<vec4<f32>>;
+@group(0) @binding(8) var<uniform> uDeltaTime : f32;
+@group(0) @binding(9) var<uniform> uTime : f32;
+@group(0) @binding(10) var<uniform> uRandomness : f32;
+@group(0) @binding(11) var<uniform> uAirResistance : f32;
+@group(0) @binding(12) var<uniform> uBoundaryRadius : f32;
 
 fn mod289_vec3(x: vec3<f32>) -> vec3<f32> {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
@@ -171,6 +173,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   var pos = inPositions[idx];
   var vel = inVelocities[idx];
   var ran = inRandom[idx];
+  var age = inAges[idx];
 
   // Set acceleration
   var acceleration = vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -191,17 +194,20 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   // Set position
   pos = pos + vel * velocity_random * uDeltaTime;
 
-  // After updating pos
-  let mesh_center = vec3<f32>(0.0, 0.0, 0.0); // or your mesh's center
-  let max_distance = uBoundaryRadius * 0.3; // tweak as needed
-  if (length(pos.xyz - mesh_center) > max_distance) {
-    // Reset position to a random mesh sample
+  // Update age
+  let lifespan = mix(0.25, 1.75, ran.z); // Each particle gets a random lifespan between 2 and 6 seconds
+  age.x = age.x + uDeltaTime;
+
+  // Re-emit if age exceeds lifespan
+  if (age.x > lifespan) {
     let meshSampleCount = arrayLength(&inMeshSamples);
     let randomIdx = u32(abs(fract(ran.y) * f32(meshSampleCount)));
     pos = inMeshSamples[randomIdx];
     vel = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    age.x = 0.0;
   }
 
   outPositions[idx] = pos;
   outVelocities[idx] = vel;
+  outAges[idx] = age;
 }
