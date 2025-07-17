@@ -8,7 +8,7 @@ export class ParticleBuffer {
   public setMeshSamples: (samples: Float32Array) => void;
   public agesBuffer: GPUBuffer;
 
-  constructor(device: GPUDevice, particleCount: number, positions?: Float32Array, velocities?: Float32Array, random?: Float32Array, normals?: Float32Array) {
+  constructor(device: GPUDevice, particleCount: number, positions?: Float32Array, velocities?: Float32Array, random?: Float32Array) {
     this.particleCount = particleCount;
     // Create mesh sample buffer (for re-emission)
     // You should provide meshSamples externally as a Float32Array (count * 4 floats)
@@ -18,19 +18,6 @@ export class ParticleBuffer {
       size: 4 * 4 * 1, // placeholder, will resize when mesh samples are set
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-
-    // Helper to set mesh samples later
-    this.setMeshSamples = (samples: Float32Array) => {
-      this.meshSampleCount = samples.length / 4;
-      if (this.meshSampleBuffer) {
-        this.meshSampleBuffer.destroy();
-      }
-      this.meshSampleBuffer = device.createBuffer({
-        size: samples.length * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      });
-      device.queue.writeBuffer(this.meshSampleBuffer, 0, samples);
-    };
 
     // Create position buffer
     this.positionBuffer = device.createBuffer({
@@ -103,6 +90,19 @@ export class ParticleBuffer {
     const ages = new Float32Array(particleCount * 4);
     ages.fill(0);
     device.queue.writeBuffer(this.agesBuffer, 0, ages);
+
+    // Helper to set mesh samples later
+    this.setMeshSamples = (samples: Float32Array) => {
+      this.meshSampleCount = samples.length / 4;
+      if (this.meshSampleBuffer) {
+        this.meshSampleBuffer.destroy();
+      }
+      this.meshSampleBuffer = device.createBuffer({
+        size: samples.length * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      device.queue.writeBuffer(this.meshSampleBuffer, 0, samples);
+    };
   }
 
   // Static method for GPGPU update

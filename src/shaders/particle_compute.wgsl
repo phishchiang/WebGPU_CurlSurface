@@ -8,7 +8,7 @@
 @group(0) @binding(7) var<storage, read_write> outAges : array<vec4<f32>>;
 @group(0) @binding(8) var<uniform> uDeltaTime : f32;
 @group(0) @binding(9) var<uniform> uTime : f32;
-@group(0) @binding(10) var<uniform> uRandomness : f32;
+@group(0) @binding(10) var<uniform> uNoiseScale : f32;
 @group(0) @binding(11) var<uniform> uAirResistance : f32;
 @group(0) @binding(12) var<uniform> uBoundaryRadius : f32;
 
@@ -177,7 +177,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
   // Set acceleration
   var acceleration = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-  let noise_val = curlNoise(pos.xyz * 0.5 * uRandomness + vec3<f32>(uTime * 0.04 * uRandomness));
+  let noise_val = curlNoise(pos.xyz * 0.5 * uNoiseScale + vec3<f32>(uTime * 0.04 * uNoiseScale));
   acceleration = acceleration + vec4<f32>(noise_val, 0.0);
 
   // set boundary
@@ -195,7 +195,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   pos = pos + vel * velocity_random * uDeltaTime;
 
   // Update age
-  let lifespan = mix(0.25, 1.75, ran.z); // Each particle gets a random lifespan between 2 and 6 seconds
+  let lifespan = mix(0.1, 1.75, ran.z); // Each particle gets a random lifespan between 2 and 6 seconds
   age.x = age.x + uDeltaTime;
 
   // Re-emit if age exceeds lifespan

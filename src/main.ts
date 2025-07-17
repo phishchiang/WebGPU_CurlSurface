@@ -18,8 +18,13 @@ import { ParticleBuffer } from './ParticleBuffer';
 import { ParticleRenderer } from './ParticleRenderer';
 import particle_computeWGSL from './shaders/particle_compute.wgsl?raw';
 
-const MESH_PATH = '/assets/meshes/light_color.glb';
+// const MESH_PATH = '/assets/meshes/light_color.glb';
+// const MESH_PATH = '/assets/meshes/monkey.glb';
+const MESH_PATH = '/assets/meshes/monkey_color.glb';
 const PARTICLE_MESH_PATH = '/assets/meshes/cube.glb';
+// arrayStride: For [x, y, z, nx, ny, nz, u, v] (stride = 8): vertexStride
+const SAMPLED_MESH_VERTEX_STRIDE = 12; 
+const PARTICLE_COUNT = 10000;
 
 export class WebGPUApp{
   private canvas: HTMLCanvasElement;
@@ -36,7 +41,7 @@ export class WebGPUApp{
     type: 'arcball' | 'WASD'; 
     uTestValue: number; 
     uTestValue_02: number; 
-    uRandomness: number; 
+    uNoiseScale: number; 
     uAirResistance: number; 
     uBoundaryRadius: number; 
     uGlow_Threshold: number;
@@ -47,8 +52,8 @@ export class WebGPUApp{
     type: 'arcball',
     uTestValue: 1.0,
     uTestValue_02: 1.0,
-    uRandomness: 0.6,
-    uAirResistance: 0.5,
+    uNoiseScale: 2.0,
+    uAirResistance: 0.7,
     uBoundaryRadius: 4.0,
     uGlow_Threshold: 0.5,
     uGlow_ThresholdKnee: 0.1,
@@ -74,7 +79,7 @@ export class WebGPUApp{
   private modelMatrixBuffer!: GPUBuffer;
   private uTestValueBuffer!: GPUBuffer;
   private uTestValue_02Buffer!: GPUBuffer;
-  private uRandomnessBuffer!: GPUBuffer;
+  private uNoiseScaleBuffer!: GPUBuffer;
   private uAirResistanceBuffer!: GPUBuffer;
   private uBoundaryRadiusBuffer!: GPUBuffer;
   private loadVertexLayout!: { arrayStride: number; attributes: GPUVertexAttribute[]; };
@@ -152,7 +157,6 @@ export class WebGPUApp{
   }
 
   private initParticleSystem() {
-    const PARTICLE_COUNT = 10000;
     // this.particleBufferA = new ParticleBuffer(this.device, PARTICLE_COUNT);
     // this.particleBufferB = new ParticleBuffer(this.device, PARTICLE_COUNT);
 
@@ -162,7 +166,6 @@ export class WebGPUApp{
       this.initialParticlePositions,
       undefined,
       undefined,
-      this.initialParticleNormals
     );
     this.particleBufferB = new ParticleBuffer(
       this.device,
@@ -170,13 +173,12 @@ export class WebGPUApp{
       this.initialParticlePositions,
       undefined,
       undefined,
-      this.initialParticleNormals
     );
 
     this.particleBufferA.setMeshSamples(this.meshSamplesArray);
     this.particleBufferB.setMeshSamples(this.meshSamplesArray);
 
-    // Pass the square mesh buffers and layout to the renderer
+    // Pass the particle instancing mesh buffers and layout to the renderer
     this.particleRenderer = new ParticleRenderer(
       this.device,
       this.presentationFormat,
@@ -274,10 +276,6 @@ export class WebGPUApp{
       const normNormalized = [norm[0]/normLen, norm[1]/normLen, norm[2]/normLen];
 
       result.push({ position: new Float32Array(pos), normal: new Float32Array(normNormalized) });
-      
-      // if (i < 10) {
-      //   console.log(`Sampled pos: ${pos}, norm: ${normNormalized}`);
-      // }
     }
     return result;
   }
@@ -288,11 +286,10 @@ export class WebGPUApp{
     // Create vertex buffer
     const vertexBuffer = this.device.createBuffer({
       size: interleavedData.byteLength,
-      usage: GPUBufferUsage.VERTEX,
-      mappedAtCreation: true,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST, // Add COPY_DST for writeBuffer
+      mappedAtCreation: false, // Not needed
     });
-    new Float32Array(vertexBuffer.getMappedRange()).set(interleavedData);
-    vertexBuffer.unmap();
+    this.device.queue.writeBuffer(vertexBuffer, 0, interleavedData);
 
     // Create index buffer if indices exist
     let indexBuffer: GPUBuffer | undefined = undefined;
@@ -315,18 +312,15 @@ export class WebGPUApp{
     this.loadIndexBuffer = indexBuffer;
     this.loadIndexCount = indexCount;
     this.loadVertexLayout = vertexLayout;
+    console.log('Curl Surface Mesh :', this.loadVertexLayout);
 
-    
-    const PARTICLE_COUNT = 10000;
-    // arrayStride: 48 bytes means each vertex is 48 bytes (12 floats, since 1 float = 4 bytes).
-    const vertexStride = 12; 
     const positionOffset = 0;
     const normalOffset = 3;
 
-    const surfacePoints = this.sampleMeshSurfacePoints(
+    const sampledRandomSurfaceVertexArray = this.sampleMeshSurfacePoints(
       interleavedData,
       indices!,
-      vertexStride,
+      SAMPLED_MESH_VERTEX_STRIDE,
       positionOffset,
       normalOffset,
       PARTICLE_COUNT
@@ -334,55 +328,53 @@ export class WebGPUApp{
 
     this.meshSamplesArray = new Float32Array(PARTICLE_COUNT * 4);
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      this.meshSamplesArray.set(surfacePoints[i].position, i * 4);
+      this.meshSamplesArray.set(sampledRandomSurfaceVertexArray[i].position, i * 4);
       this.meshSamplesArray[i * 4 + 3] = 1.0; // w
     }
-
-    console.log(this.loadVertexLayout);
-    console.log(surfacePoints);
-
     this.initialParticlePositions = new Float32Array(PARTICLE_COUNT * 4);
     this.initialParticleNormals = new Float32Array(PARTICLE_COUNT * 4);
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const p = surfacePoints[i];
-      this.initialParticlePositions.set(p.position, i * 4);
-      this.initialParticlePositions[i * 4 + 3] = 1.0; // w
-      this.initialParticleNormals.set(p.normal, i * 4);
-      this.initialParticleNormals[i * 4 + 3] = 0.0; // w (unused)
-    }
-
+        const p = sampledRandomSurfaceVertexArray[i];
+        this.initialParticlePositions.set(p.position, i * 4);
+        this.initialParticlePositions[i * 4 + 3] = 1.0; // w
+        // this.initialParticleNormals.set(p.normal, i * 4);
+        // this.initialParticleNormals[i * 4 + 3] = 0.0; // w (unused)
+      }
+      
     // Load square mesh for particles
     const { 
-      interleavedData: sqData, 
-      indices: sqIndices, 
-      indexCount: sqIndexCount, 
-      vertexLayout: sqVertexLayout 
+      interleavedData: particleMeshData, 
+      indices: particleMeshIndices, 
+      indexCount: particleMeshIndexCount, 
+      vertexLayout: particleMeshVertexLayout 
     } = await loadAndProcessGLB(PARTICLE_MESH_PATH);
+
+    console.log('Particle Inatancing Mesh :', particleMeshVertexLayout);
 
     // Create vertex buffer for square mesh
     this.particleVerticesBuffer = this.device.createBuffer({
-      size: sqData.byteLength,
+      size: particleMeshData.byteLength,
       usage: GPUBufferUsage.VERTEX,
       mappedAtCreation: true,
     });
-    new Float32Array(this.particleVerticesBuffer.getMappedRange()).set(sqData);
+    new Float32Array(this.particleVerticesBuffer.getMappedRange()).set(particleMeshData);
     this.particleVerticesBuffer.unmap();
 
     // Create index buffer for square mesh
-    let sqIndexBuffer: GPUBuffer | undefined = undefined;
-    if (sqIndices) {
-      const paddedSqIndexBufferSize = Math.ceil(sqIndices.byteLength / 4) * 4;
-      sqIndexBuffer = this.device.createBuffer({
-        size: paddedSqIndexBufferSize,
+    let particleMeshIndexBuffer: GPUBuffer | undefined = undefined;
+    if (particleMeshIndices) {
+      const paddedparticleMeshIndexBufferSize = Math.ceil(particleMeshIndices.byteLength / 4) * 4;
+      particleMeshIndexBuffer = this.device.createBuffer({
+        size: paddedparticleMeshIndexBufferSize,
         usage: GPUBufferUsage.INDEX,
         mappedAtCreation: true,
       });
-      new Uint16Array(sqIndexBuffer.getMappedRange()).set(sqIndices);
-      sqIndexBuffer.unmap();
+      new Uint16Array(particleMeshIndexBuffer.getMappedRange()).set(particleMeshIndices);
+      particleMeshIndexBuffer.unmap();
     }
-    this.particleIndexBuffer = sqIndexBuffer;
-    this.particleIndexCount = sqIndexCount;
-    this.particleVertexLayout = sqVertexLayout;
+    this.particleIndexBuffer = particleMeshIndexBuffer;
+    this.particleIndexCount = particleMeshIndexCount;
+    this.particleVertexLayout = particleMeshVertexLayout;
   }
 
   private initCam(){
@@ -468,12 +460,12 @@ export class WebGPUApp{
     this.device.queue.writeBuffer(this.uTestValue_02Buffer, 0, uTestValue_02Arr.buffer);
 
     // uTandomness
-    this.uRandomnessBuffer = this.device.createBuffer({
+    this.uNoiseScaleBuffer = this.device.createBuffer({
       size: 4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    const uRandomnessArr = new Float32Array([this.params.uRandomness]);
-    this.device.queue.writeBuffer(this.uRandomnessBuffer, 0, uRandomnessArr.buffer);
+    const uNoiseScaleArr = new Float32Array([this.params.uNoiseScale]);
+    this.device.queue.writeBuffer(this.uNoiseScaleBuffer, 0, uNoiseScaleArr.buffer);
 
     // uAirResistance
     this.uAirResistanceBuffer = this.device.createBuffer({
@@ -542,8 +534,8 @@ export class WebGPUApp{
     });
 
     const particleFolder = this.gui.addFolder('Particle Params');
-    particleFolder.add(this.params, 'uRandomness', 0.0, 1.0).step(0.01).onChange((value) => {
-      this.updateFloatUniform( 'uRandomness', value );
+    particleFolder.add(this.params, 'uNoiseScale', 0.0, 5.0).step(0.01).onChange((value) => {
+      this.updateFloatUniform( 'uNoiseScale', value );
     });
     particleFolder.add(this.params, 'uAirResistance', 0.0, 1.0).step(0.01).onChange((value) => {
       this.updateFloatUniform( 'uAirResistance', value );
@@ -578,8 +570,8 @@ export class WebGPUApp{
       case 'uTestValue_02':
         this.device.queue.writeBuffer(this.uTestValue_02Buffer, 0, updatedFloatArray.buffer);
         break;
-      case 'uRandomness':
-        this.device.queue.writeBuffer(this.uRandomnessBuffer, 0, updatedFloatArray.buffer);
+      case 'uNoiseScale':
+        this.device.queue.writeBuffer(this.uNoiseScaleBuffer, 0, updatedFloatArray.buffer);
         break;
       case 'uAirResistance':
         this.device.queue.writeBuffer(this.uAirResistanceBuffer, 0, updatedFloatArray.buffer);
@@ -794,7 +786,7 @@ export class WebGPUApp{
       this.prevDt,
       this.deltaTimeBuffer,
       this.uTimeBuffer,
-      this.uRandomnessBuffer,
+      this.uNoiseScaleBuffer,
       this.uAirResistanceBuffer,
       this.uBoundaryRadiusBuffer,
     );
