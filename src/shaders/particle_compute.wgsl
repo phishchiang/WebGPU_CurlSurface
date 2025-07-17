@@ -12,6 +12,9 @@
 @group(0) @binding(11) var<uniform> uAirResistance : f32;
 @group(0) @binding(12) var<uniform> uBoundaryRadius : f32;
 
+// arrayLength is not supported on some devices, so used a fixed value
+const MESH_SAMPLE_COUNT: u32 = 10000u;
+
 fn mod289_vec3(x: vec3<f32>) -> vec3<f32> {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
 }
@@ -200,7 +203,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
   // Re-emit if age exceeds lifespan
   if (age.x > lifespan) {
-    let meshSampleCount = arrayLength(&inMeshSamples);
+    // let meshSampleCount = arrayLength(&inMeshSamples);
+    let meshSampleCount = MESH_SAMPLE_COUNT;
     let randomIdx = u32(abs(fract(ran.y) * f32(meshSampleCount)));
     pos = inMeshSamples[randomIdx];
     vel = vec4<f32>(0.0, 0.0, 0.0, 0.0);
