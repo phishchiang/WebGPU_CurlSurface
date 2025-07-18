@@ -39,6 +39,7 @@ export class WebGPUApp{
   private aspect!: number;
   private params: { 
     type: 'arcball' | 'WASD'; 
+    model: keyof typeof WebGPUApp.MODEL_PATHS;
     uTestValue: number; 
     uTestValue_02: number; 
     uNoiseScale: number; 
@@ -50,10 +51,11 @@ export class WebGPUApp{
     uGlow_Intensity: number;
   } = {
     type: 'arcball',
+    model: 'monkey',
     uTestValue: 1.0,
     uTestValue_02: 1.0,
     uNoiseScale: 2.0,
-    uAirResistance: 0.7,
+    uAirResistance: 0.8,
     uBoundaryRadius: 4.0,
     uGlow_Threshold: 0.5,
     uGlow_ThresholdKnee: 0.1,
@@ -99,7 +101,12 @@ export class WebGPUApp{
     analog: { x: number; y: number; zoom: number; touching: boolean };
   };
   private static readonly CLEAR_COLOR = [0.1, 0.1, 0.1, 1.0];
-  private static readonly CAMERA_POSITION = vec3.create(3, 2, 5);
+  private static readonly CAMERA_POSITION = vec3.create(1.2, 1.1, 2.3);
+  private static readonly MODEL_PATHS = {
+    monkey: '/assets/meshes/monkey_color.glb',
+    teapot: '/assets/meshes/teapot.glb',
+    cylinder: '/assets/meshes/light_color.glb',
+  };
   private passThroughEffect!: PassThroughEffect;
   // Glow FX Variables
   private brightPassEffect!: BrightPassEffect;
@@ -281,8 +288,9 @@ export class WebGPUApp{
   }
 
   private async initLoadAndProcessGLB() {
-    const { interleavedData, indices, indexCount, vertexLayout } = await loadAndProcessGLB(MESH_PATH);
-  
+    const meshPath = WebGPUApp.MODEL_PATHS[this.params.model];
+    const { interleavedData, indices, indexCount, vertexLayout } = await loadAndProcessGLB(meshPath);
+
     // Create vertex buffer
     const vertexBuffer = this.device.createBuffer({
       size: interleavedData.byteLength,
@@ -520,18 +528,23 @@ export class WebGPUApp{
   }
 
   private initializeGUI() {
-    this.gui.add(this.params, 'type', ['arcball', 'WASD']).onChange(() => {
-      this.newCameraType = this.params.type;
-      this.cameras[this.newCameraType].matrix = this.cameras[this.oldCameraType].matrix;
-      this.oldCameraType = this.newCameraType
+    // this.gui.add(this.params, 'type', ['arcball', 'WASD']).onChange(() => {
+    //   this.newCameraType = this.params.type;
+    //   this.cameras[this.newCameraType].matrix = this.cameras[this.oldCameraType].matrix;
+    //   this.oldCameraType = this.newCameraType
+    // });
+
+    this.gui.add(this.params, 'model', ['monkey', 'teapot', 'cylinder']).onChange(async () => {
+      await this.initLoadAndProcessGLB(); // Reload mesh and reinitialize as needed
+      this.initParticleSystem(); // Re-init particle system if needed
     });
     
-    this.gui.add(this.params, 'uTestValue', 0.0, 1.0).step(0.01).onChange((value) => {
-      this.updateFloatUniform( 'uTestValue', value );
-    });
-    this.gui.add(this.params, 'uTestValue_02', 0.0, 1.0).step(0.01).onChange((value) => {
-      this.updateFloatUniform( 'uTestValue_02', value );
-    });
+    // this.gui.add(this.params, 'uTestValue', 0.0, 1.0).step(0.01).onChange((value) => {
+    //   this.updateFloatUniform( 'uTestValue', value );
+    // });
+    // this.gui.add(this.params, 'uTestValue_02', 0.0, 1.0).step(0.01).onChange((value) => {
+    //   this.updateFloatUniform( 'uTestValue_02', value );
+    // });
 
     const particleFolder = this.gui.addFolder('Particle Params');
     particleFolder.add(this.params, 'uNoiseScale', 0.0, 5.0).step(0.01).onChange((value) => {
@@ -550,7 +563,7 @@ export class WebGPUApp{
     glowFolder.add(this.params, 'uGlow_ThresholdKnee', 0.0, 1.0).step(0.01).onChange(() => this.updateGlowUniforms());
     glowFolder.add(this.params, 'uGlow_Radius', 0.1, 20.0).step(0.1).onChange(() => this.updateGlowUniforms());
     glowFolder.add(this.params, 'uGlow_Intensity', 0.0, 1.0).step(0.001).onChange(() => this.updateGlowUniforms());
-    glowFolder.open();
+    // glowFolder.open();
   }
 
   private updateGlowUniforms() {
