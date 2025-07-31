@@ -117,7 +117,6 @@ export class WebGPUApp{
   private enableGlow: boolean = true; // or control with GUI
   private particleRenderer!: ParticleRenderer;
   private particleBufferA!: ParticleBuffer;
-  private particleBufferB!: ParticleBuffer;
   private usePing = true;
   private particleComputePipeline!: GPUComputePipeline;
   private deltaTimeBuffer!: GPUBuffer;
@@ -165,7 +164,6 @@ export class WebGPUApp{
 
   private initParticleSystem() {
     // this.particleBufferA = new ParticleBuffer(this.device, PARTICLE_COUNT);
-    // this.particleBufferB = new ParticleBuffer(this.device, PARTICLE_COUNT);
 
     this.particleBufferA = new ParticleBuffer(
       this.device,
@@ -174,16 +172,8 @@ export class WebGPUApp{
       undefined,
       undefined,
     );
-    this.particleBufferB = new ParticleBuffer(
-      this.device,
-      PARTICLE_COUNT,
-      this.initialParticlePositions,
-      undefined,
-      undefined,
-    );
 
     this.particleBufferA.setMeshSamples(this.meshSamplesArray);
-    this.particleBufferB.setMeshSamples(this.meshSamplesArray);
 
     // Pass the particle instancing mesh buffers and layout to the renderer
     this.particleRenderer = new ParticleRenderer(
@@ -198,19 +188,16 @@ export class WebGPUApp{
     // For some reason, it has to manually create the BindGroupLayout instead of usinng auto for layout
     const particleComputeBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
-        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
-        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, 
-        { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 10, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 11, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        { binding: 12, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // positions
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // velocities
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // randoms
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }, // ages
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } }, // mesh samples
+        { binding: 5, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }, // deltaTime
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }, // uTime
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }, // uRandomness
+        { binding: 8, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }, // uAirResistance
+        { binding: 9, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }, // uBoundaryRadius
       ],
     });
 
@@ -785,24 +772,9 @@ export class WebGPUApp{
 
     const commandEncoder = this.device.createCommandEncoder();
 
-    // Select ping or pong buffers
-    const inBuffer = this.usePing ? this.particleBufferA : this.particleBufferB;
-    const outBuffer = this.usePing ? this.particleBufferB : this.particleBufferA;
+    // --- Update particles on GPU (in-place, instance method) ---
+    this.particleBufferA.updateParticles( this.device, commandEncoder, this.particleComputePipeline, deltaTime, this.deltaTimeBuffer, this.uTimeBuffer, this.uNoiseScaleBuffer, this.uAirResistanceBuffer, this.uBoundaryRadiusBuffer );
 
-    // --- Update particles on GPU ---
-    ParticleBuffer.updateParticles(
-      this.device,
-      commandEncoder,
-      this.particleComputePipeline,
-      inBuffer,
-      outBuffer,
-      this.prevDt,
-      this.deltaTimeBuffer,
-      this.uTimeBuffer,
-      this.uNoiseScaleBuffer,
-      this.uAirResistanceBuffer,
-      this.uBoundaryRadiusBuffer,
-    );
 
     // --- Render scene ---
     const passEncoder = commandEncoder.beginRenderPass(this.renderPassDescriptor);
@@ -815,7 +787,7 @@ export class WebGPUApp{
 
     this.particleRenderer.updateUniforms(this.device, this.projectionMatrix, this.viewMatrix, this.particle_modelMatrix);
     // Render using the *output* buffer (the one just written to)
-    this.particleRenderer.render(passEncoder, outBuffer);
+    this.particleRenderer.render(passEncoder, this.particleBufferA);
 
     passEncoder.end();
 

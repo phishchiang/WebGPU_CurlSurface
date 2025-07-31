@@ -1,16 +1,13 @@
-@group(0) @binding(0) var<storage, read>  inPositions  : array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read_write> outPositions  : array<vec4<f32>>;
-@group(0) @binding(2) var<storage, read>  inVelocities : array<vec4<f32>>;
-@group(0) @binding(3) var<storage, read_write> outVelocities : array<vec4<f32>>;
-@group(0) @binding(4) var<storage, read>  inRandom : array<vec4<f32>>;
-@group(0) @binding(5) var<storage, read>  inMeshSamples : array<vec4<f32>>;
-@group(0) @binding(6) var<storage, read>  inAges : array<vec4<f32>>;
-@group(0) @binding(7) var<storage, read_write> outAges : array<vec4<f32>>;
-@group(0) @binding(8) var<uniform> uDeltaTime : f32;
-@group(0) @binding(9) var<uniform> uTime : f32;
-@group(0) @binding(10) var<uniform> uNoiseScale : f32;
-@group(0) @binding(11) var<uniform> uAirResistance : f32;
-@group(0) @binding(12) var<uniform> uBoundaryRadius : f32;
+@group(0) @binding(0) var<storage, read_write> positions : array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> velocities : array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read> randoms : array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read_write> ages : array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read> inMeshSamples : array<vec4<f32>>;
+@group(0) @binding(5) var<uniform> uDeltaTime : f32;
+@group(0) @binding(6) var<uniform> uTime : f32;
+@group(0) @binding(7) var<uniform> uNoiseScale : f32;
+@group(0) @binding(8) var<uniform> uAirResistance : f32;
+@group(0) @binding(9) var<uniform> uBoundaryRadius : f32;
 
 // arrayLength is not supported on some devices, so used a fixed value
 const MESH_SAMPLE_COUNT: u32 = 10000u;
@@ -172,11 +169,11 @@ fn quat_from_matrix(m: mat3x3<f32>) -> vec4<f32> {
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
   let idx = id.x;
 
-  // Simple Euler integration
-  var pos = inPositions[idx];
-  var vel = inVelocities[idx];
-  var ran = inRandom[idx];
-  var age = inAges[idx];
+  // Simple Euler integration (in-place)
+  var pos = positions[idx];
+  var vel = velocities[idx];
+  let ran = randoms[idx];
+  var age = ages[idx];
 
   // Set acceleration
   var acceleration = vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -211,7 +208,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     age.x = 0.0;
   }
 
-  outPositions[idx] = pos;
-  outVelocities[idx] = vel;
-  outAges[idx] = age;
+  positions[idx] = pos;
+  velocities[idx] = vel;
+  ages[idx] = age;
 }

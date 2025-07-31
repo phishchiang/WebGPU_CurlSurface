@@ -106,12 +106,10 @@ export class ParticleBuffer {
   }
 
   // Static method for GPGPU update
-  static updateParticles(
+  public updateParticles(
     device: GPUDevice,
     commandEncoder: GPUCommandEncoder,
     computePipeline: GPUComputePipeline,
-    inBuffer: ParticleBuffer,
-    outBuffer: ParticleBuffer,
     deltaTime: number,
     deltaTimeBuffer: GPUBuffer,
     uTimeBuffer: GPUBuffer,
@@ -126,19 +124,16 @@ export class ParticleBuffer {
     const bindGroup = device.createBindGroup({
       layout: computePipeline.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: { buffer: inBuffer.positionBuffer } },
-        { binding: 1, resource: { buffer: outBuffer.positionBuffer } },
-        { binding: 2, resource: { buffer: inBuffer.velocityBuffer } },
-        { binding: 3, resource: { buffer: outBuffer.velocityBuffer } },
-        { binding: 4, resource: { buffer: inBuffer.randomBuffer } }, // Only use inBuffer.randomBuffer
-        { binding: 5, resource: { buffer: inBuffer.meshSampleBuffer } },
-        { binding: 6, resource: { buffer: inBuffer.agesBuffer } },
-        { binding: 7, resource: { buffer: outBuffer.agesBuffer } },
-        { binding: 8, resource: { buffer: deltaTimeBuffer } },
-        { binding: 9, resource: { buffer: uTimeBuffer } },
-        { binding: 10, resource: { buffer: uRandomnessBuffer } },
-        { binding: 11, resource: { buffer: uAirResistanceBuffer } },
-        { binding: 12, resource: { buffer: uBoundaryRadiusBuffer } }
+        { binding: 0, resource: { buffer: this.positionBuffer } },
+        { binding: 1, resource: { buffer: this.velocityBuffer } },
+        { binding: 2, resource: { buffer: this.randomBuffer } },
+        { binding: 3, resource: { buffer: this.agesBuffer } },
+        { binding: 4, resource: { buffer: this.meshSampleBuffer } },
+        { binding: 5, resource: { buffer: deltaTimeBuffer } },
+        { binding: 6, resource: { buffer: uTimeBuffer } },
+        { binding: 7, resource: { buffer: uRandomnessBuffer } },
+        { binding: 8, resource: { buffer: uAirResistanceBuffer } },
+        { binding: 9, resource: { buffer: uBoundaryRadiusBuffer } },
       ],
     });
 
@@ -148,7 +143,7 @@ export class ParticleBuffer {
     pass.setBindGroup(0, bindGroup);
 
     const WORKGROUP_SIZE = 64;
-    const workgroupCount = Math.ceil(inBuffer.particleCount / WORKGROUP_SIZE);
+    const workgroupCount = Math.ceil(this.particleCount / WORKGROUP_SIZE);
     pass.dispatchWorkgroups(workgroupCount);
 
     pass.end();
