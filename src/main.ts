@@ -773,7 +773,7 @@ export class WebGPUApp{
     const commandEncoder = this.device.createCommandEncoder();
 
     // --- Update particles on GPU (in-place, instance method) ---
-    this.particleBufferA.updateParticles( this.device, commandEncoder, this.particleComputePipeline, deltaTime, this.deltaTimeBuffer, this.uTimeBuffer, this.uNoiseScaleBuffer, this.uAirResistanceBuffer, this.uBoundaryRadiusBuffer );
+    this.particleBufferA.updateParticles( this.device, commandEncoder, this.particleComputePipeline, this.prevDt, this.deltaTimeBuffer, this.uTimeBuffer, this.uNoiseScaleBuffer, this.uAirResistanceBuffer, this.uBoundaryRadiusBuffer );
 
 
     // --- Render scene ---
